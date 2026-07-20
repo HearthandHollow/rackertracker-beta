@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RackerTracker Beta — Join the Test</title>
+<meta name="description" content="Sign up for internal testing of RackerTracker, the pool tournament app.">
+<style>
+  :root {
+    --felt: #0b5d3b;
+    --felt-dark: #073d27;
+    --rail: #4a2c17;
+    --cream: #f5efe0;
+    --gold: #d9a441;
+    --ink: #14231c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-dark) 75%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    color: var(--cream);
+  }
+  .table {
+    width: 100%;
+    max-width: 460px;
+    background: rgba(0,0,0,0.25);
+    border: 6px solid var(--rail);
+    border-radius: 22px;
+    padding: 32px 26px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+    text-align: center;
+  }
+  .balls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .ball {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; color: #fff;
+    box-shadow: inset -4px -5px 8px rgba(0,0,0,0.35), inset 3px 4px 6px rgba(255,255,255,0.35), 0 3px 6px rgba(0,0,0,0.4);
+  }
+  .b8 { background: #1a1a1a; }
+  .b9 { background: linear-gradient(180deg, #fff 0 28%, #e8b400 28% 72%, #fff 72% 100%); color: #1a1a1a; }
+  .b3 { background: #c62828; }
+  h1 { font-size: 26px; letter-spacing: 0.5px; margin-bottom: 6px; }
+  h1 span { color: var(--gold); }
+  .tag { font-size: 14px; opacity: 0.85; margin-bottom: 24px; line-height: 1.5; }
+  .device-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(217,164,65,0.15);
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  form { display: flex; flex-direction: column; gap: 12px; }
+  input[type=email], input[type=text] {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    font-size: 16px;
+    background: var(--cream);
+    color: var(--ink);
+    outline: none;
+    width: 100%;
+  }
+  input:focus { border-color: var(--gold); }
+  .hint { font-size: 12px; opacity: 0.7; text-align: left; margin-top: -6px; padding-left: 4px; }
+  .platform-row { display: none; gap: 10px; }
+  .platform-row.show { display: flex; }
+  .platform-row button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    border: 2px solid var(--cream);
+    background: transparent;
+    color: var(--cream);
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .platform-row button.selected {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: var(--ink);
+    font-weight: 700;
+  }
+  button.cta {
+    padding: 15px;
+    border-radius: 12px;
+    border: none;
+    background: var(--gold);
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  button.cta:active { transform: scale(0.97); }
+  button.cta:disabled { opacity: 0.6; cursor: wait; }
+  .result {
+    display: none;
+    margin-top: 4px;
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .result.ok { display: block; background: rgba(46,125,50,0.35); border: 1px solid #7bc67e; }
+  .result.err { display: block; background: rgba(198,40,40,0.3); border: 1px solid #e57373; }
+  .foot { margin-top: 22px; font-size: 12px; opacity: 0.6; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <main class="table">
+    <div class="balls" aria-hidden="true">
+      <div class="ball b3">3</div>
+      <div class="ball b8">8</div>
+      <div class="ball b9">9</div>
+    </div>
+    <h1>Racker<span>Tracker</span> Beta</h1>
+    <p class="tag">Help test the pool tournament app before it hits the big leagues. Drop your email and we'll rack you up with an install link.</p>
+
+    <div class="device-chip" id="deviceChip">Detecting your device&hellip;</div>
+
+    <form id="signupForm" novalidate>
+      <input type="email" id="email" name="email" placeholder="your@email.com" autocomplete="email" inputmode="email" required>
+      <p class="hint" id="emailHint">Android users: use the Google account email on your phone.</p>
+      <input type="text" id="pname" name="name" placeholder="Name (optional)" autocomplete="name">
+      <div class="platform-row" id="platformRow">
+        <button type="button" data-platform="android">Android</button>
+        <button type="button" data-platform="ios">iPhone / iPad</button>
+      </div>
+      <button type="submit" class="cta" id="submitBtn">Rack Me Up</button>
+      <div class="result" id="result" role="status"></div>
+    </form>
+
+    <p class="foot">We only use your email to send the test invite and testing updates. No spam, no scratch shots.</p>
+  </main>
+
+<script>
+  var platform = null;
+  var chip = document.getElementById('deviceChip');
+  var row = document.getElementById('platformRow');
+  var hint = document.getElementById('emailHint');
+
+  function detectPlatform() {
+    var ua = navigator.userAgent || '';
+    var isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    if (/android/i.test(ua)) return 'android';
+    if (/iphone|ipad|ipod/i.test(ua) || isIPadOS) return 'ios';
+    return null;
+  }
+
+  function setPlatform(p, detected) {
+    platform = p;
+    if (p === 'android') {
+      chip.innerHTML = '&#129302; Android detected' + (detected ? '' : ' (manual)');
+      hint.style.display = 'block';
+    } else if (p === 'ios') {
+      chip.innerHTML = '&#63743; iPhone/iPad detected' + (detected ? '' : ' (manual)');
+      hint.style.display = 'none';
+    }
+    var btns = row.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('selected', btns[i].getAttribute('data-platform') === p);
+    }
+  }
+
+  var auto = detectPlatform();
+  if (auto) {
+    setPlatform(auto, true);
+    row.classList.add('show'); // still allow override
+  } else {
+    chip.textContent = "Looks like you're on a computer — pick your phone type:";
+    row.classList.add('show');
+    hint.style.display = 'none';
+  }
+
+  row.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-platform]');
+    if (btn) setPlatform(btn.getAttribute('data-platform'), false);
+  });
+
+  document.getElementById('signupForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var result = document.getElementById('result');
+    var btn = document.getElementById('submitBtn');
+    var email = document.getElementById('email').value.trim();
+    var name = document.getElementById('pname').value.trim();
+    result.className = 'result';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      result.textContent = 'That email looks like a scratch — double-check it.';
+      result.classList.add('err');
+      return;
+    }
+    if (!platform) {
+      result.textContent = 'Pick Android or iPhone first so we send the right link.';
+      result.classList.add('err');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Chalking up…';
+    try {
+      var res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, name: name, platform: platform })
+      });
+      var data = await res.json();
+      if (res.ok) {
+        result.innerHTML = data.message;
+        result.classList.add('ok');
+        btn.textContent = "You're In!";
+      } else {
+        result.textContent = data.error || 'Something went sideways. Try again in a minute.';
+        result.classList.add('err');
+        btn.disabled = false;
+        btn.textContent = 'Rack Me Up';
+      }
+    } catch (err) {
+      result.textContent = 'Network foul — could not reach the server. Try again.';
+      result.classList.add('err');
+      btn.disabled = false;
+      btn.textContent = 'Rack Me Up';
+    }
+  });
+</script>
+</body>
+</html>

@@ -112,6 +112,37 @@ async function ascInvite(email, firstName) {
 }
 // ---------------------------------------------------------------------------
 
+// --- Beta perk: 90-day Organizer trial ------------------------------------
+// Tells the RackerTracker Firebase backend about this signup so the account
+// gets trialOrganizerUntil (+90 days, clock starts at account creation).
+// Non-fatal: a hook failure never blocks the signup emails.
+async function registerBetaPerk(email, name, platform) {
+  const url = process.env.BETA_HOOK_URL;
+  const secret = process.env.BETA_HOOK_SECRET;
+  if (!url || !secret) return null;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-beta-hook-secret": secret,
+      },
+      body: JSON.stringify({ email, name, platform }),
+    });
+    if (!res.ok) throw new Error(`hook ${res.status}: ${await res.text()}`);
+    return await res.json();
+  } catch (e) {
+    console.error("registerBetaPerk failed:", e.message);
+    return null;
+  }
+}
+
+const PERK_HTML = `<p style="background:#f4ead2;border-radius:8px;padding:12px 16px">
+  🏆 <strong>Beta perk:</strong> your account gets <strong>90 days of free
+  Organizer access</strong> — create and run your own tournaments. It activates
+  automatically when you register in the app with this email address.</p>`;
+// ---------------------------------------------------------------------------
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -139,6 +170,9 @@ module.exports = async (req, res) => {
   const greeting = safeName ? `Hey ${safeName},` : "Hey there,";
 
   try {
+    // Register the 90-day Organizer perk (non-fatal, runs for both platforms).
+    await registerBetaPerk(email, name, platform);
+
     if (platform === "android") {
       const playUrl = process.env.PLAY_OPTIN_URL;
       // 1. Confirmation to the tester
@@ -157,7 +191,8 @@ module.exports = async (req, res) => {
             ${playUrl ? `<p><a href="${esc(playUrl)}" style="background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block">Join the Android Beta</a></p>` : "<p>(Install link will follow in a second email.)</p>"}
             <p style="font-size:13px;color:#666">If the link says the test isn't available yet,
             give it a few hours and try again — your email may still be propagating.</p>
-            <p>Rack 'em up!<br>— RackerTracker</p>
+            ${PERK_HTML}
+          <p>Rack 'em up!<br>— RackerTracker</p>
           </div>`,
       });
       // 2. Notify owner to add the tester in Play Console
@@ -215,6 +250,7 @@ module.exports = async (req, res) => {
             }
             <li>Install RackerTracker and start potting balls.</li>
           </ol>
+          ${PERK_HTML}
           <p>Rack 'em up!<br>— RackerTracker</p>
         </div>`,
     });

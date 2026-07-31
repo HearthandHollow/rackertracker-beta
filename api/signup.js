@@ -154,7 +154,8 @@ module.exports = async (req, res) => {
     return res.status(429).json({ error: "Easy there, shark — try again in a minute." });
   }
 
-  const { email, name, platform } = req.body || {};
+  const { email, name, platform, source } = req.body || {};
+  const safeSource = esc(String(source || "web").slice(0, 40).replace(/[^\w.-]/g, "")) || "web";
   if (!email || !EMAIL_RE.test(email)) {
     return res.status(400).json({ error: "Please provide a valid email address." });
   }
@@ -204,6 +205,7 @@ module.exports = async (req, res) => {
             <p><strong>New Android beta signup</strong></p>
             <p>Email: <code>${safeEmail}</code><br>
             Name: ${safeName || "(none)"}<br>
+            Source: <strong>${safeSource}</strong><br>
             IP: ${esc(ip)}</p>
             <p>Action: add this email to the internal testing list in
             <a href="https://play.google.com/console">Play Console</a> →
@@ -258,7 +260,7 @@ module.exports = async (req, res) => {
     await sendEmail({
       to: process.env.OWNER_EMAIL || "hammondhunterc@gmail.com",
       subject: `[RackerTracker] New iOS tester: ${safeEmail}`,
-      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> (${inviteMode === "asc" ? "auto-invited via App Store Connect" : "sent TestFlight link"})</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>IP: ${esc(ip)}</p></div>`,
+      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> (${inviteMode === "asc" ? "auto-invited via App Store Connect" : "sent TestFlight link"})</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>Source: <strong>${safeSource}</strong><br>IP: ${esc(ip)}</p></div>`,
     });
 
     return res.status(200).json({

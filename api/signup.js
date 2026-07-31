@@ -175,7 +175,12 @@ module.exports = async (req, res) => {
     await registerBetaPerk(email, name, platform);
 
     if (platform === "android") {
-      const playUrl = process.env.PLAY_OPTIN_URL;
+      // Self-serve flow: the Play closed-testing track's testers are the
+      // "RackerTracker Beta" Google Group (anyone can join), so the tester adds
+      // themselves — no manual Play Console step, no waiting on us.
+      const groupUrl = process.env.GROUP_JOIN_URL || "https://groups.google.com/g/rackertracker-beta";
+      const playUrl = process.env.PLAY_OPTIN_URL || "https://play.google.com/apps/testing/com.racktrack.pool";
+      const btnStyle = "background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block";
       // 1. Confirmation to the tester
       await sendEmail({
         to: email,
@@ -184,39 +189,42 @@ module.exports = async (req, res) => {
           <div style="font-family:sans-serif;max-width:520px;margin:auto">
             <h2 style="color:#0b5d3b">Welcome to the RackerTracker beta!</h2>
             <p>${greeting}</p>
-            <p>You've been added to the queue for the <strong>Android internal test</strong>.
-            Your email is being added to the tester list now (this is a quick manual step
-            on our end, usually done within a few hours).</p>
-            <p><strong>Once you're on the list</strong>, tap this link on your Android phone
-            (signed in with this Google account) to opt in and install:</p>
-            ${playUrl ? `<p><a href="${esc(playUrl)}" style="background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block">Join the Android Beta</a></p>` : "<p>(Install link will follow in a second email.)</p>"}
-            <p style="font-size:13px;color:#666">If the link says the test isn't available yet,
-            give it a few hours and try again — your email may still be propagating.</p>
+            <p>Two taps on your Android phone and you're in — no waiting:</p>
+            <p><strong>Step 1:</strong> Join the tester group with the Google account
+            signed in on your phone (tap &ldquo;Join group&rdquo;):</p>
+            <p><a href="${esc(groupUrl)}" style="${btnStyle}">Join the Tester Group</a></p>
+            <p><strong>Step 2:</strong> Become a tester and install from Google Play:</p>
+            <p><a href="${esc(playUrl)}" style="${btnStyle}">Join the Android Beta</a></p>
+            <p style="font-size:13px;color:#666">Both links must be opened with the same
+            Google account your phone's Play Store uses. If step 2 says the test isn't
+            available yet, give it a couple of minutes after joining the group and retry.</p>
             ${PERK_HTML}
           <p>Rack 'em up!<br>— RackerTracker</p>
           </div>`,
       });
-      // 2. Notify owner to add the tester in Play Console
+      // 2. Heads-up to owner (informational; testers self-join via the Google Group)
       await sendEmail({
         to: process.env.OWNER_EMAIL || "hammondhunterc@gmail.com",
         subject: `[RackerTracker] New Android tester: ${safeEmail}`,
         html: `
           <div style="font-family:sans-serif">
-            <p><strong>New Android beta signup</strong></p>
+            <p><strong>New Android beta signup</strong> (self-serve — no action needed;
+            they join the RackerTracker Beta Google Group themselves)</p>
             <p>Email: <code>${safeEmail}</code><br>
             Name: ${safeName || "(none)"}<br>
             Source: <strong>${safeSource}</strong><br>
             IP: ${esc(ip)}</p>
-            <p>Action: add this email to the internal testing list in
-            <a href="https://play.google.com/console">Play Console</a> →
-            Testing → Internal testing → Testers.</p>
           </div>`,
       });
+      const linkStyle = "color:#d9a441;font-weight:700";
       return res.status(200).json({
         message:
-          "You're on the list! Check your inbox — we've sent your install link. " +
-          "Your email gets added to the Google Play tester list shortly, so if the " +
-          "link doesn't work immediately, try again in a few hours.",
+          "You're in! Two taps to install:<br>" +
+          `1. <a href="${esc(groupUrl)}" target="_blank" rel="noopener" style="${linkStyle}">Join the tester group</a>` +
+          " &mdash; tap &ldquo;Join group&rdquo; with the Google account signed in on this phone.<br>" +
+          `2. <a href="${esc(playUrl)}" target="_blank" rel="noopener" style="${linkStyle}">Become a tester &amp; install</a>` +
+          " from Google Play.<br>" +
+          "We also emailed you the same links.",
       });
     }
 

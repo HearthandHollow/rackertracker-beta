@@ -179,7 +179,10 @@ module.exports = async (req, res) => {
       // "RackerTracker Beta" Google Group (anyone can join), so the tester adds
       // themselves — no manual Play Console step, no waiting on us.
       const groupUrl = process.env.GROUP_JOIN_URL || "https://groups.google.com/g/rackertracker-beta";
-      const playUrl = process.env.PLAY_OPTIN_URL || "https://play.google.com/apps/testing/com.racktrack.pool";
+      // NOT process.env.PLAY_OPTIN_URL — that env var holds the *internal* track
+      // link (apps/internaltest/...), but the Google Group gates the *closed*
+      // track, whose opt-in URL is the app-level testing link below.
+      const playUrl = process.env.CLOSED_OPTIN_URL || "https://play.google.com/apps/testing/com.racktrack.pool";
       const btnStyle = "background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block";
       // 1. Confirmation to the tester
       await sendEmail({

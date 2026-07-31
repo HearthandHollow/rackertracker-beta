@@ -190,6 +190,16 @@
     if (btn) setPlatform(btn.getAttribute('data-platform'), false);
   });
 
+  // Signup source tag (e.g. ?src=qr from the printed QR code). Falls back to
+  // utm_source, then 'web' for people who type the URL directly.
+  function getSource() {
+    try {
+      var p = new URLSearchParams(window.location.search);
+      var s = p.get('src') || p.get('utm_source') || 'web';
+      return String(s).slice(0, 40).replace(/[^\w.-]/g, '');
+    } catch (e) { return 'web'; }
+  }
+
   document.getElementById('signupForm').addEventListener('submit', async function (e) {
     e.preventDefault();
     var result = document.getElementById('result');
@@ -215,7 +225,7 @@
       var res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, name: name, platform: platform })
+        body: JSON.stringify({ email: email, name: name, platform: platform, source: getSource() })
       });
       var data = await res.json();
       if (res.ok) {

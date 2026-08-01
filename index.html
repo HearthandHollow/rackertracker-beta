@@ -155,18 +155,21 @@
   function detectPlatform() {
     var ua = navigator.userAgent || '';
     var isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-    if (/android/i.test(ua)) return 'android';
+    // Check iOS FIRST: real Android UAs never contain "iPhone", but some
+    // QR-scanner in-app browsers ship junk UAs containing both, and one
+    // mis-detected a tester's iPhone as Android when Android was checked first.
     if (/iphone|ipad|ipod/i.test(ua) || isIPadOS) return 'ios';
+    if (/android/i.test(ua)) return 'android';
     return null;
   }
 
   function setPlatform(p, detected) {
     platform = p;
     if (p === 'android') {
-      chip.innerHTML = '&#129302; Android detected' + (detected ? '' : ' (manual)');
+      chip.innerHTML = '&#129302; Android detected' + (detected ? ' &mdash; wrong? tap below' : ' (manual)');
       hint.style.display = 'block';
     } else if (p === 'ios') {
-      chip.innerHTML = '&#63743; iPhone/iPad detected' + (detected ? '' : ' (manual)');
+      chip.innerHTML = '&#63743; iPhone/iPad detected' + (detected ? ' &mdash; wrong? tap below' : ' (manual)');
       hint.style.display = 'none';
     }
     var btns = row.querySelectorAll('button');

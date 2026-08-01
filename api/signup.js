@@ -173,6 +173,10 @@ module.exports = async (req, res) => {
   const safeEmail = esc(email.slice(0, 200));
   const greeting = safeName ? `Hey ${safeName},` : "Hey there,";
 
+  // Diagnostic: a tester's iPhone auto-detected as Android (QR-scanner in-app
+  // browser with a junk UA). Log platform + UA so misdetections are traceable.
+  console.log(`signup: platform=${platform} source=${safeSource} ua=${String(req.headers["user-agent"] || "").slice(0, 300)}`);
+
   try {
     // Register the 90-day Organizer perk (non-fatal, runs for both platforms).
     await registerBetaPerk(email, name, platform);

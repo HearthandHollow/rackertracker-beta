@@ -154,8 +154,11 @@ module.exports = async (req, res) => {
     return res.status(429).json({ error: "Easy there, shark — try again in a minute." });
   }
 
-  const { email, name, platform, source } = req.body || {};
+  const { email: rawEmail, name, platform, source } = req.body || {};
   const safeSource = esc(String(source || "web").slice(0, 40).replace(/[^\w.-]/g, "")) || "web";
+  // Normalize before validating: trim, and strip trailing dots — "user@gmail.com."
+  // passes EMAIL_RE but Resend rejects it with a 422 (real tester hit this).
+  const email = String(rawEmail || "").trim().replace(/\.+$/, "");
   if (!email || !EMAIL_RE.test(email)) {
     return res.status(400).json({ error: "Please provide a valid email address." });
   }

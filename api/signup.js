@@ -238,18 +238,33 @@ module.exports = async (req, res) => {
       });
     }
 
-    // iOS
-    let inviteMode = "link";
+    // iOS. Enrollment paths in priority order:
+    //   1. ASC auto-invite (ASC_* env vars) — adds the tester to the TestFlight
+    //      beta group via Apple's API; Apple emails the official invite.
+    //   2. TESTFLIGHT_URL public link — tester self-installs.
+    // If NEITHER works (unconfigured, or the ASC call errored and there's no
+    // link), nothing actually enrolls them — so alert the OWNER loudly to add
+    // them by hand instead of silently promising a link that never comes.
+    let inviteMode = "none"; // none | asc | link
+    let ascError = null;
     if (ascConfigured()) {
       try {
         await ascInvite(email, name);
         inviteMode = "asc";
       } catch (e) {
-        console.error("ASC invite failed, falling back to public link:", e.message);
+        ascError = e.message;
+        console.error("ASC invite failed:", e.message);
       }
     }
-
     const tfUrl = process.env.TESTFLIGHT_URL;
+    if (inviteMode !== "asc" && tfUrl) inviteMode = "link";
+
+    const iosStep =
+      inviteMode === "asc"
+        ? "<li>Watch for an official TestFlight invite email from Apple (arriving separately) and tap <strong>View in TestFlight</strong>.</li>"
+        : inviteMode === "link"
+          ? `<li>Tap this link on your device: <a href="${esc(tfUrl)}" style="background:#0b5d3b;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block">Join the iOS Beta</a></li>`
+          : "<li>We're setting up your TestFlight access now — your invite email from Apple will arrive shortly. If it hasn't shown up within a day, just reply to this email.</li>";
     await sendEmail({
       to: email,
       subject: "You're in — RackerTracker iOS beta 🎱",
@@ -261,31 +276,37 @@ module.exports = async (req, res) => {
           <strong>TestFlight</strong> (Apple's free beta-testing app).</p>
           <ol>
             <li>Install <a href="https://apps.apple.com/app/testflight/id899247664">TestFlight</a> from the App Store.</li>
-            ${
-              inviteMode === "asc"
-                ? "<li>Watch for an official TestFlight invite email from Apple (arriving separately) and tap <strong>View in TestFlight</strong>.</li>"
-                : tfUrl
-                  ? `<li>Tap this link on your device: <a href="${esc(tfUrl)}" style="background:#0b5d3b;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block">Join the iOS Beta</a></li>`
-                  : "<li>(Install link will follow in a second email.)</li>"
-            }
+            ${iosStep}
             <li>Install RackerTracker and start potting balls.</li>
           </ol>
           ${PERK_HTML}
           <p>Rack 'em up!<br>— RackerTracker</p>
         </div>`,
     });
-    // heads-up to owner (informational; no action needed for iOS)
+    // Owner heads-up. LOUD subject + actionable note when the tester still needs
+    // a manual TestFlight add (auto-invite unconfigured or failed).
+    const ownerActionNeeded = inviteMode === "none";
+    const ownerNote =
+      inviteMode === "asc"
+        ? "auto-invited via App Store Connect — no action needed"
+        : inviteMode === "link"
+          ? "sent the TestFlight public link — no action needed"
+          : ascError
+            ? `⚠ AUTO-INVITE FAILED (${esc(ascError)}). Add them by hand: App Store Connect → TestFlight → your external group → add ${safeEmail}.`
+            : `⚠ NO iOS enrollment configured. Set the ASC_* env vars (auto-invite) or TESTFLIGHT_URL in Vercel; until then add this tester by hand: App Store Connect → TestFlight → your external group → add ${safeEmail}.`;
     await sendEmail({
       to: process.env.OWNER_EMAIL || "hammondhunterc@gmail.com",
-      subject: `[RackerTracker] New iOS tester: ${safeEmail}`,
-      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> (${inviteMode === "asc" ? "auto-invited via App Store Connect" : "sent TestFlight link"})</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>Source: <strong>${safeSource}</strong><br>IP: ${esc(ip)}</p></div>`,
+      subject: `[RackerTracker] ${ownerActionNeeded ? "⚠ iOS tester NEEDS MANUAL TestFlight add" : "New iOS tester"}: ${safeEmail}`,
+      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> — ${ownerNote}</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>Source: <strong>${safeSource}</strong><br>IP: ${esc(ip)}</p></div>`,
     });
 
     return res.status(200).json({
       message:
         inviteMode === "asc"
           ? "You're in! Check your inbox — instructions are on the way, and Apple will send your official TestFlight invite separately."
-          : "You're in! Check your inbox for your TestFlight install link.",
+          : inviteMode === "link"
+            ? "You're in! Check your inbox for your TestFlight install link."
+            : "You're in! We're setting up your TestFlight access — watch your inbox for an invite from Apple shortly.",
     });
   } catch (err) {
     console.error("Signup error:", err);

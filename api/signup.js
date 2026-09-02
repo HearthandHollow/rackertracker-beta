@@ -49,9 +49,9 @@ async function sendEmail({ to, subject, html }) {
   }
 }
 
-// --- Beta perk: 90-day Organizer trial ------------------------------------
+// --- Beta perk: 7-day Organizer trial ------------------------------------
 // Tells the RackerTracker Firebase backend about this signup so the account
-// gets trialOrganizerUntil (+90 days, clock starts at account creation).
+// gets trialOrganizerUntil (+7 days, clock starts at account creation).
 // Non-fatal: a hook failure never blocks the signup emails.
 async function registerBetaPerk(email, name, platform) {
   const url = process.env.BETA_HOOK_URL;
@@ -75,7 +75,7 @@ async function registerBetaPerk(email, name, platform) {
 }
 
 const PERK_HTML = `<p style="background:#f4ead2;border-radius:8px;padding:12px 16px">
-  🏆 <strong>Beta perk:</strong> your account gets <strong>90 days of free
+  🏆 <strong>Beta perk:</strong> your account gets <strong>7 days of free
   Organizer access</strong> — create and run your own tournaments. It activates
   automatically when you register in the app with this email address.</p>`;
 // ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ module.exports = async (req, res) => {
   console.log(`signup: platform=${platform} source=${safeSource} ua=${String(req.headers["user-agent"] || "").slice(0, 300)}`);
 
   try {
-    // Register the 90-day Organizer perk (non-fatal, runs for both platforms).
+    // Register the 7-day Organizer perk (non-fatal, runs for both platforms).
     await registerBetaPerk(email, name, platform);
 
     if (platform === "android") {
@@ -178,7 +178,7 @@ module.exports = async (req, res) => {
     // iOS. The app is LIVE on the App Store (1.1.0, since 2026-09) — same build
     // TestFlight was serving — so iOS "beta" signups go straight to the store
     // listing. No TestFlight, no ASC invite, no owner action. The signup still
-    // earns the 90-day Organizer perk (registerBetaPerk above).
+    // earns the 7-day Organizer perk (registerBetaPerk above).
     const storeUrl = process.env.APP_STORE_URL || "https://apps.apple.com/us/app/id6785885046";
     const storeBtn = `<a href="${esc(storeUrl)}" style="background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block">Get RackerTracker on the App Store</a>`;
     await sendEmail({
@@ -208,7 +208,7 @@ module.exports = async (req, res) => {
       message:
         "You're in! RackerTracker is live on the App Store &mdash; no TestFlight needed. " +
         `<a href="${esc(storeUrl)}" target="_blank" rel="noopener" style="${linkStyleIos}">Download it here</a> ` +
-        "and register with this email to activate your 90-day free Organizer access. " +
+        "and register with this email to activate your 7-day free Organizer access. " +
         "We also emailed you the link.",
     });
   } catch (err) {

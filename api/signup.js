@@ -2,17 +2,14 @@
 //
 // Required env vars (set in Vercel dashboard -> Project -> Settings -> Environment Variables):
 //   RESEND_API_KEY        - API key from resend.com
-//   OWNER_EMAIL           - where Android signup notifications go (Hunter)
-//   PLAY_OPTIN_URL        - Google Play internal testing opt-in link
-//                           (Play Console -> Testing -> Internal testing -> "Copy link")
-//   TESTFLIGHT_URL        - TestFlight public link (App Store Connect -> TestFlight ->
-//                           your external group -> enable Public Link), OR leave unset
-//                           if using ASC auto-invite below.
-// Optional (auto-invite iOS testers via App Store Connect API instead of a public link):
-//   ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY (contents of the .p8), ASC_BETA_GROUP_ID
+//   OWNER_EMAIL           - where signup notifications go (Hunter)
+// Optional:
+//   GROUP_JOIN_URL        - Android tester Google Group join page (has a default)
+//   CLOSED_OPTIN_URL      - Play closed-testing opt-in link (has a default)
+//   APP_STORE_URL         - live App Store listing for iOS (has a default)
 //   FROM_EMAIL            - defaults to "RackerTracker Beta <onboarding@resend.dev>"
-
-const crypto = require("crypto");
+// (TESTFLIGHT_URL / ASC_* / PLAY_OPTIN_URL are obsolete: iOS goes to the live
+//  App Store listing since 2026-09-02, and Android uses the closed-track link.)
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -51,66 +48,6 @@ async function sendEmail({ to, subject, html }) {
     throw new Error(`Resend ${res.status}: ${body}`);
   }
 }
-
-// --- Optional: App Store Connect auto-invite -------------------------------
-function ascConfigured() {
-  return (
-    process.env.ASC_KEY_ID &&
-    process.env.ASC_ISSUER_ID &&
-    process.env.ASC_PRIVATE_KEY &&
-    process.env.ASC_BETA_GROUP_ID
-  );
-}
-
-function b64url(input) {
-  return Buffer.from(input).toString("base64url");
-}
-
-function ascToken() {
-  const header = { alg: "ES256", kid: process.env.ASC_KEY_ID, typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: process.env.ASC_ISSUER_ID,
-    iat: now,
-    exp: now + 10 * 60,
-    aud: "appstoreconnect-v1",
-  };
-  const unsigned = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
-  const key = crypto.createPrivateKey(process.env.ASC_PRIVATE_KEY.replace(/\\n/g, "\n"));
-  const signature = crypto
-    .sign("sha256", Buffer.from(unsigned), { key, dsaEncoding: "ieee-p1363" })
-    .toString("base64url");
-  return `${unsigned}.${signature}`;
-}
-
-async function ascInvite(email, firstName) {
-  const res = await fetch("https://api.appstoreconnect.apple.com/v1/betaTesters", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${ascToken()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      data: {
-        type: "betaTesters",
-        attributes: { email, firstName: firstName || undefined },
-        relationships: {
-          betaGroups: {
-            data: [{ type: "betaGroups", id: process.env.ASC_BETA_GROUP_ID }],
-          },
-        },
-      },
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    // 409 usually means the tester already exists — treat as success
-    if (res.status === 409) return "already";
-    throw new Error(`ASC ${res.status}: ${body}`);
-  }
-  return "invited";
-}
-// ---------------------------------------------------------------------------
 
 // --- Beta perk: 90-day Organizer trial ------------------------------------
 // Tells the RackerTracker Firebase backend about this signup so the account
@@ -238,75 +175,41 @@ module.exports = async (req, res) => {
       });
     }
 
-    // iOS. Enrollment paths in priority order:
-    //   1. ASC auto-invite (ASC_* env vars) — adds the tester to the TestFlight
-    //      beta group via Apple's API; Apple emails the official invite.
-    //   2. TESTFLIGHT_URL public link — tester self-installs.
-    // If NEITHER works (unconfigured, or the ASC call errored and there's no
-    // link), nothing actually enrolls them — so alert the OWNER loudly to add
-    // them by hand instead of silently promising a link that never comes.
-    let inviteMode = "none"; // none | asc | link
-    let ascError = null;
-    if (ascConfigured()) {
-      try {
-        await ascInvite(email, name);
-        inviteMode = "asc";
-      } catch (e) {
-        ascError = e.message;
-        console.error("ASC invite failed:", e.message);
-      }
-    }
-    const tfUrl = process.env.TESTFLIGHT_URL;
-    if (inviteMode !== "asc" && tfUrl) inviteMode = "link";
-
-    const iosStep =
-      inviteMode === "asc"
-        ? "<li>Watch for an official TestFlight invite email from Apple (arriving separately) and tap <strong>View in TestFlight</strong>.</li>"
-        : inviteMode === "link"
-          ? `<li>Tap this link on your device: <a href="${esc(tfUrl)}" style="background:#0b5d3b;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block">Join the iOS Beta</a></li>`
-          : "<li>We're setting up your TestFlight access now — your invite email from Apple will arrive shortly. If it hasn't shown up within a day, just reply to this email.</li>";
+    // iOS. The app is LIVE on the App Store (1.1.0, since 2026-09) — same build
+    // TestFlight was serving — so iOS "beta" signups go straight to the store
+    // listing. No TestFlight, no ASC invite, no owner action. The signup still
+    // earns the 90-day Organizer perk (registerBetaPerk above).
+    const storeUrl = process.env.APP_STORE_URL || "https://apps.apple.com/us/app/id6785885046";
+    const storeBtn = `<a href="${esc(storeUrl)}" style="background:#0b5d3b;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;display:inline-block">Get RackerTracker on the App Store</a>`;
     await sendEmail({
       to: email,
-      subject: "You're in — RackerTracker iOS beta 🎱",
+      subject: "You're in — RackerTracker is live on the App Store 🎱",
       html: `
         <div style="font-family:sans-serif;max-width:520px;margin:auto">
           <h2 style="color:#0b5d3b">Welcome to the RackerTracker beta!</h2>
           <p>${greeting}</p>
-          <p>You're set up to test RackerTracker on your iPhone/iPad via
-          <strong>TestFlight</strong> (Apple's free beta-testing app).</p>
-          <ol>
-            <li>Install <a href="https://apps.apple.com/app/testflight/id899247664">TestFlight</a> from the App Store.</li>
-            ${iosStep}
-            <li>Install RackerTracker and start potting balls.</li>
-          </ol>
+          <p>Good news — RackerTracker is <strong>live on the App Store</strong>, so
+          there's no TestFlight hoop to jump through. Just install it like any
+          other app:</p>
+          <p>${storeBtn}</p>
           ${PERK_HTML}
           <p>Rack 'em up!<br>— RackerTracker</p>
         </div>`,
     });
-    // Owner heads-up. LOUD subject + actionable note when the tester still needs
-    // a manual TestFlight add (auto-invite unconfigured or failed).
-    const ownerActionNeeded = inviteMode === "none";
-    const ownerNote =
-      inviteMode === "asc"
-        ? "auto-invited via App Store Connect — no action needed"
-        : inviteMode === "link"
-          ? "sent the TestFlight public link — no action needed"
-          : ascError
-            ? `⚠ AUTO-INVITE FAILED (${esc(ascError)}). Add them by hand: App Store Connect → TestFlight → your external group → add ${safeEmail}.`
-            : `⚠ NO iOS enrollment configured. Set the ASC_* env vars (auto-invite) or TESTFLIGHT_URL in Vercel; until then add this tester by hand: App Store Connect → TestFlight → your external group → add ${safeEmail}.`;
+    // Owner heads-up (informational; nothing to do for iOS).
     await sendEmail({
       to: process.env.OWNER_EMAIL || "hammondhunterc@gmail.com",
-      subject: `[RackerTracker] ${ownerActionNeeded ? "⚠ iOS tester NEEDS MANUAL TestFlight add" : "New iOS tester"}: ${safeEmail}`,
-      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> — ${ownerNote}</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>Source: <strong>${safeSource}</strong><br>IP: ${esc(ip)}</p></div>`,
+      subject: `[RackerTracker] New iOS tester: ${safeEmail}`,
+      html: `<div style="font-family:sans-serif"><p><strong>New iOS beta signup</strong> — pointed to the live App Store listing; no action needed.</p><p>Email: <code>${safeEmail}</code><br>Name: ${safeName || "(none)"}<br>Source: <strong>${safeSource}</strong><br>IP: ${esc(ip)}</p></div>`,
     });
 
+    const linkStyleIos = "color:#d9a441;font-weight:700";
     return res.status(200).json({
       message:
-        inviteMode === "asc"
-          ? "You're in! Check your inbox — instructions are on the way, and Apple will send your official TestFlight invite separately."
-          : inviteMode === "link"
-            ? "You're in! Check your inbox for your TestFlight install link."
-            : "You're in! We're setting up your TestFlight access — watch your inbox for an invite from Apple shortly.",
+        "You're in! RackerTracker is live on the App Store &mdash; no TestFlight needed. " +
+        `<a href="${esc(storeUrl)}" target="_blank" rel="noopener" style="${linkStyleIos}">Download it here</a> ` +
+        "and register with this email to activate your 90-day free Organizer access. " +
+        "We also emailed you the link.",
     });
   } catch (err) {
     console.error("Signup error:", err);

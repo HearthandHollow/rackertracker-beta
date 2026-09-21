@@ -75,7 +75,8 @@
     width: 100%;
   }
   input:focus { border-color: var(--gold); }
-  .hint { font-size: 12px; opacity: 0.7; text-align: left; margin-top: -6px; padding-left: 4px; }
+  input[readonly] { background: #e6dfcc; color: #3b4a42; }
+  .hint { font-size: 12px; opacity: 0.7; text-align: left; margin-top: -6px; padding-left: 4px; line-height: 1.45; }
   .platform-row { display: none; gap: 10px; }
   .platform-row.show { display: flex; }
   .platform-row button {
@@ -118,6 +119,67 @@
   .result.ok { display: block; background: rgba(46,125,50,0.35); border: 1px solid #7bc67e; }
   .result.err { display: block; background: rgba(198,40,40,0.3); border: 1px solid #e57373; }
   .foot { margin-top: 22px; font-size: 12px; opacity: 0.6; line-height: 1.5; }
+
+  /* --- Android: Google-account verification block --- */
+  .gbox {
+    display: none;
+    text-align: left;
+    background: rgba(217,164,65,0.12);
+    border: 1px solid var(--gold);
+    border-radius: 12px;
+    padding: 14px 14px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .gbox.show { display: block; }
+  .gbox strong { color: var(--gold); }
+  .gbox p { margin-bottom: 10px; }
+  .gsi-wrap { display: flex; justify-content: center; min-height: 44px; margin: 4px 0 6px; }
+  .gsi-wrap.hidden { display: none; }
+  .divider {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; opacity: 0.7; margin: 6px 0 2px;
+  }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: rgba(245,239,224,0.35); }
+  .webview-note {
+    display: none;
+    background: rgba(255,193,7,0.15);
+    border: 1px solid #ffc107;
+    color: #ffe08a;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .webview-note.show { display: block; }
+  .verified {
+    display: none;
+    align-items: center; gap: 8px;
+    background: rgba(46,125,50,0.35);
+    border: 1px solid #7bc67e;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    text-align: left;
+  }
+  .verified.show { display: flex; }
+  .verified .tick { font-weight: 700; color: #a5e0a7; }
+  .warn {
+    display: none;
+    text-align: left;
+    background: rgba(198,40,40,0.3);
+    border: 1px solid #e57373;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .warn.show { display: block; }
+  .warn label {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-top: 10px; font-size: 14px; cursor: pointer;
+  }
+  .warn input[type=checkbox] { width: 20px; height: 20px; margin-top: 1px; flex: none; accent-color: var(--gold); }
 </style>
 </head>
 <body>
@@ -132,8 +194,35 @@
     <div class="device-chip" id="deviceChip">Detecting your device&hellip;</div>
 
     <form id="signupForm" novalidate>
+
+      <!-- Android only: Google Play can only add the Google account signed into the phone's Play Store -->
+      <div class="gbox" id="gbox">
+        <p><strong>Android testers:</strong> Google Play only lets us add the
+        <strong>Google account that's signed into the Play Store on your phone</strong>.
+        Any other address bounces and you never get the install. <span id="gsiLead">Verify it in one tap:</span></p>
+        <div class="webview-note" id="webviewNote">
+          You're inside the <span id="webviewName">Facebook</span> browser, which blocks Google sign-in.
+          Tap the <b>&#8942;</b> menu (top right) &rarr; <b>Open in Chrome</b>, or type your Google account email below.
+        </div>
+        <div class="gsi-wrap" id="gsiWrap"><div id="gsiBtn"></div></div>
+        <div class="verified" id="verifiedBox" role="status">
+          <span class="tick">&#10004;</span>
+          <span>Verified Google account: <b id="verifiedEmail"></b></span>
+        </div>
+        <div class="divider" id="gDivider">or type it in</div>
+      </div>
+
       <input type="email" id="email" name="email" placeholder="your@email.com" autocomplete="email" inputmode="email" required>
-      <p class="hint" id="emailHint">Android users: use the Google account email on your phone.</p>
+      <p class="hint" id="emailHint">Must be the <b>exact</b> email of the Google account signed into your phone's Play Store &mdash; open Play Store &rarr; tap your profile picture to check. Gmail addresses are typical; Yahoo/Outlook/iCloud only work if you created a Google account with them.</p>
+
+      <div class="warn" id="gaWarn" role="alert">
+        <div id="gaWarnText"></div>
+        <label>
+          <input type="checkbox" id="gaAck">
+          <span>Yes &mdash; this is the account I see under my profile picture in the Play Store.</span>
+        </label>
+      </div>
+
       <input type="text" id="pname" name="name" placeholder="Name (optional)" autocomplete="name">
       <div class="platform-row" id="platformRow">
         <button type="button" data-platform="android">Android</button>
@@ -147,10 +236,26 @@
   </main>
 
 <script>
+  // Google Identity Services web client (public by design). Must match GOOGLE_CLIENT_ID
+  // in the Vercel env so /api/signup can check the token's audience.
+  var GOOGLE_CLIENT_ID = '755903630970-9i4a1uk09e6i71bgr1cgri9lnok3mckc.apps.googleusercontent.com';
+
   var platform = null;
   var chip = document.getElementById('deviceChip');
   var row = document.getElementById('platformRow');
   var hint = document.getElementById('emailHint');
+  var gbox = document.getElementById('gbox');
+  var gsiWrap = document.getElementById('gsiWrap');
+  var gDivider = document.getElementById('gDivider');
+  var webviewNote = document.getElementById('webviewNote');
+  var verifiedBox = document.getElementById('verifiedBox');
+  var emailEl = document.getElementById('email');
+  var gaWarn = document.getElementById('gaWarn');
+  var gaWarnText = document.getElementById('gaWarnText');
+  var gaAck = document.getElementById('gaAck');
+
+  var googleIdToken = null;   // set after a successful Google sign-in
+  var gsiReady = false;
 
   function detectPlatform() {
     var ua = navigator.userAgent || '';
@@ -163,14 +268,46 @@
     return null;
   }
 
+  // In-app browsers (Facebook, Instagram, Messenger, generic Android WebView)
+  // can't run Google sign-in: Google rejects embedded webviews.
+  function detectWebview() {
+    var ua = navigator.userAgent || '';
+    if (/FBAN|FBAV|FB_IAB|FB4A/i.test(ua)) return /Messenger|Orca/i.test(ua) ? 'Messenger' : 'Facebook';
+    if (/Instagram/i.test(ua)) return 'Instagram';
+    if (/Snapchat/i.test(ua)) return 'Snapchat';
+    if (/; wv\)/.test(ua)) return 'in-app';
+    return null;
+  }
+
+  function looksGoogleDomain(email) {
+    var m = /@([^@]+)$/.exec((email || '').trim().toLowerCase());
+    if (!m) return true; // malformed -> the normal validator handles it
+    return m[1] === 'gmail.com' || m[1] === 'googlemail.com';
+  }
+
+  function hideWarn() { gaWarn.classList.remove('show'); gaAck.checked = false; }
+  function hideGsi() {
+    gsiWrap.classList.add('hidden');
+    gDivider.style.display = 'none';
+    document.getElementById('gsiLead').style.display = 'none';
+  }
+  function showGsi() {
+    gsiWrap.classList.remove('hidden');
+    gDivider.style.display = '';
+    document.getElementById('gsiLead').style.display = '';
+  }
+
   function setPlatform(p, detected) {
     platform = p;
     if (p === 'android') {
       chip.innerHTML = '&#129302; Android detected' + (detected ? ' &mdash; wrong? tap below' : ' (manual)');
       hint.style.display = 'block';
+      gbox.classList.add('show');
     } else if (p === 'ios') {
       chip.innerHTML = '&#63743; iPhone/iPad detected' + (detected ? ' &mdash; wrong? tap below' : ' (manual)');
       hint.style.display = 'none';
+      gbox.classList.remove('show');
+      hideWarn();
     }
     var btns = row.querySelectorAll('button');
     for (var i = 0; i < btns.length; i++) {
@@ -188,10 +325,83 @@
     hint.style.display = 'none';
   }
 
+  var webview = detectWebview();
+  if (webview) {
+    document.getElementById('webviewName').textContent = webview === 'in-app' ? 'app’s' : webview;
+    webviewNote.classList.add('show');
+    hideGsi();                           // sign-in can't work here; don't tease them with the button
+  }
+
   row.addEventListener('click', function (e) {
     var btn = e.target.closest('button[data-platform]');
     if (btn) setPlatform(btn.getAttribute('data-platform'), false);
   });
+
+  // Typing a new address invalidates any earlier Google verification.
+  emailEl.addEventListener('input', function () {
+    hideWarn();
+    if (googleIdToken) clearVerified();
+  });
+
+  function clearVerified() {
+    googleIdToken = null;
+    verifiedBox.classList.remove('show');
+    emailEl.readOnly = false;
+    if (!webview && gsiReady) showGsi();
+  }
+
+  // --- Google sign-in ------------------------------------------------------
+  function decodeJwtPayload(token) {
+    try {
+      var b = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(decodeURIComponent(escape(atob(b))));
+    } catch (e) { return null; }
+  }
+
+  function onGoogleCredential(resp) {
+    var payload = resp && resp.credential ? decodeJwtPayload(resp.credential) : null;
+    if (!payload || !payload.email) {
+      showResult('Google sign-in didn’t come back with an email. Try again or type it in below.', 'err');
+      return;
+    }
+    googleIdToken = resp.credential;
+    emailEl.value = payload.email;
+    emailEl.readOnly = true;
+    hideWarn();
+    document.getElementById('verifiedEmail').textContent = payload.email;
+    verifiedBox.classList.add('show');
+    hideGsi();
+    var nameEl = document.getElementById('pname');
+    if (!nameEl.value && payload.name) nameEl.value = payload.name;
+    // They've proven the account — finish the signup for them.
+    submitSignup();
+  }
+
+  function initGsi() {
+    if (webview) return;
+    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf('__') === 0) return; // not configured yet
+    if (!(window.google && google.accounts && google.accounts.id)) return;
+    try {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: onGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        ux_mode: 'popup',
+        itp_support: true
+      });
+      google.accounts.id.renderButton(document.getElementById('gsiBtn'), {
+        theme: 'filled_blue', size: 'large', text: 'continue_with', shape: 'pill', width: 300, logo_alignment: 'left'
+      });
+      gsiReady = true;
+    } catch (e) { gsiReady = false; }
+    if (!gsiReady) hideGsi();
+  }
+
+  // If the GIS script never shows up (blocked, offline) the manual path still works.
+  setTimeout(function () { if (!gsiReady) hideGsi(); }, 5000);
+  window.__onGsiLoad = initGsi;
+  // -------------------------------------------------------------------------
 
   // Signup source tag (e.g. ?src=qr from the printed QR code). Falls back to
   // utm_source, then 'web' for people who type the URL directly.
@@ -203,51 +413,76 @@
     } catch (e) { return 'web'; }
   }
 
-  document.getElementById('signupForm').addEventListener('submit', async function (e) {
+  function showResult(html, kind) {
+    var result = document.getElementById('result');
+    result.className = 'result';
+    if (kind === 'ok') result.innerHTML = html; else result.textContent = html;
+    result.classList.add(kind);
+  }
+
+  document.getElementById('signupForm').addEventListener('submit', function (e) {
     e.preventDefault();
+    submitSignup();
+  });
+
+  async function submitSignup() {
     var result = document.getElementById('result');
     var btn = document.getElementById('submitBtn');
-    var email = document.getElementById('email').value.trim();
+    var email = emailEl.value.trim();
     var name = document.getElementById('pname').value.trim();
     result.className = 'result';
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      result.textContent = 'That email looks like a scratch — double-check it.';
-      result.classList.add('err');
+      showResult('That email looks like a scratch — double-check it.', 'err');
       return;
     }
     if (!platform) {
-      result.textContent = 'Pick Android or iPhone first so we send the right link.';
-      result.classList.add('err');
+      showResult('Pick Android or iPhone first so we send the right link.', 'err');
       return;
+    }
+
+    // Android without Google verification: non-Google-looking addresses need an
+    // explicit acknowledgement. Soft, not a hard block — Workspace/custom-domain
+    // Google accounts are real and a domain filter would wrongly reject them.
+    if (platform === 'android' && !googleIdToken && !looksGoogleDomain(email)) {
+      if (!gaAck.checked) {
+        gaWarnText.innerHTML = 'That doesn’t look like a Google account. Google Play can <b>only</b> add the account ' +
+          'signed into the Play Store on your phone — a Yahoo/Outlook/iCloud address only works if it <i>is</i> ' +
+          'a Google account. Check Play Store &rarr; profile picture, then confirm:';
+        gaWarn.classList.add('show');
+        gaAck.focus();
+        return;
+      }
     }
 
     btn.disabled = true;
     btn.textContent = 'Chalking up…';
     try {
+      var body = { email: email, name: name, platform: platform, source: getSource() };
+      if (googleIdToken) body.idToken = googleIdToken;
+      else if (platform === 'android') body.ack = !!gaAck.checked;
       var res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, name: name, platform: platform, source: getSource() })
+        body: JSON.stringify(body)
       });
       var data = await res.json();
       if (res.ok) {
-        result.innerHTML = data.message;
-        result.classList.add('ok');
+        showResult(data.message, 'ok');
         btn.textContent = "You're In!";
       } else {
-        result.textContent = data.error || 'Something went sideways. Try again in a minute.';
-        result.classList.add('err');
+        showResult(data.error || 'Something went sideways. Try again in a minute.', 'err');
         btn.disabled = false;
         btn.textContent = 'Rack Me Up';
+        if (data.code === 'bad_token') clearVerified();
       }
     } catch (err) {
-      result.textContent = 'Network foul — could not reach the server. Try again.';
-      result.classList.add('err');
+      showResult('Network foul — could not reach the server. Try again.', 'err');
       btn.disabled = false;
       btn.textContent = 'Rack Me Up';
     }
-  });
+  }
 </script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="window.__onGsiLoad && window.__onGsiLoad()"></script>
 </body>
 </html>
